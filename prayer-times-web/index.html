@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waktu Sholat & Adzan - Islamic Prayer Times</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#667eea">
+</head>
+<body>
+    <div class="islamic-pattern"></div>
+    
+    <div class="container">
+        <!-- Navigation -->
+        <nav class="nav">
+            <div class="nav-content">
+                <div class="logo">
+                    <i class="fas fa-mosque"></i>
+                    <span>Islamic Prayer Times</span>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="#" class="active" data-page="home"><i class="fas fa-home"></i> Beranda</a></li>
+                    <li><a href="#" data-page="detail"><i class="fas fa-calendar-alt"></i> Detail</a></li>
+                    <li><a href="#" data-page="qibla"><i class="fas fa-compass"></i> Arah Qibla</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Home Page -->
+        <div id="homePage" class="page active">
+            <!-- Header -->
+            <div class="header-section">
+                <h1><i class="fas fa-crescent-moon"></i> Waktu Sholat Hari Ini</h1>
+                <p>Jadwal sholat akurat berdasarkan lokasi Anda</p>
+            </div>
+
+            <!-- Location Selector -->
+            <div class="location-selector">
+                <h3><i class="fas fa-map-marker-alt"></i> Pilih Lokasi</h3>
+                <div class="location-controls">
+                    <input type="text" id="cityInput" placeholder="Masukkan nama kota..." value="Yogyakarta">
+                    <select id="countrySelect">
+                        <option value="Indonesia">Indonesia</option>
+                        <option value="Malaysia">Malaysia</option>
+                        <option value="Singapore">Singapura</option>
+                        <option value="Saudi Arabia">Arab Saudi</option>
+                    </select>
+                    <button id="searchBtn"><i class="fas fa-search"></i> Cari</button>
+                    <button id="locationBtn"><i class="fas fa-location-arrow"></i> Lokasi Saya</button>
+                </div>
+            </div>
+
+            <!-- Info Cards -->
+            <div class="info-cards">
+                <div class="info-card">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <h3>Lokasi</h3>
+                    <p id="currentLocation">Yogyakarta, Indonesia</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-calendar"></i>
+                    <h3>Tanggal Masehi</h3>
+                    <p id="gregorianDate">Loading...</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-moon"></i>
+                    <h3>Tanggal Hijriah</h3>
+                    <p id="hijriDate">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Countdown to Next Prayer -->
+            <div class="countdown-section">
+                <div class="countdown-title">
+                    <i class="fas fa-clock"></i>
+                    <span id="nextPrayerName">Menuju Maghrib</span>
+                </div>
+                <div class="countdown-display">
+                    <div class="countdown-item">
+                        <span class="countdown-number" id="hours">00</span>
+                        <div class="countdown-label">Jam</div>
+                    </div>
+                    <div class="countdown-item">
+                        <span class="countdown-number" id="minutes">00</span>
+                        <div class="countdown-label">Menit</div>
+                    </div>
+                    <div class="countdown-item">
+                        <span class="countdown-number" id="seconds">00</span>
+                        <div class="countdown-label">Detik</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Prayer Times Grid -->
+            <div id="prayerTimesContainer" class="loading">
+                <i class="fas fa-spinner"></i>
+                <p>Memuat jadwal sholat...</p>
+            </div>
+        </div>
+
+        <!-- Detail Page -->
+        <div id="detailPage" class="page">
+            <div class="header-section">
+                <h1><i class="fas fa-calendar-alt"></i> Jadwal Sholat Detail</h1>
+                <p>Lihat jadwal sholat untuk bulan ini</p>
+            </div>
+
+            <div class="location-selector">
+                <h3><i class="fas fa-calendar-week"></i> Pilih Bulan & Tahun</h3>
+                <div class="location-controls">
+                    <select id="monthSelect">
+                        <option value="1">Januari</option>
+                        <option value="2">Februari</option>
+                        <option value="3">Maret</option>
+                        <option value="4">April</option>
+                        <option value="5">Mei</option>
+                        <option value="6">Juni</option>
+                        <option value="7">Juli</option>
+                        <option value="8">Agustus</option>
+                        <option value="9">September</option>
+                        <option value="10">Oktober</option>
+                        <option value="11">November</option>
+                        <option value="12">Desember</option>
+                    </select>
+                    <input type="number" id="yearInput" min="2020" max="2030" placeholder="Tahun">
+                    <button id="loadMonthBtn"><i class="fas fa-sync"></i> Muat Data</button>
+                </div>
+            </div>
+
+            <div id="monthlySchedule" class="loading">
+                <i class="fas fa-spinner"></i>
+                <p>Memuat jadwal bulanan...</p>
+            </div>
+        </div>
+
+        <!-- Qibla Page -->
+        <div id="qiblaPage" class="page">
+            <div class="header-section">
+                <h1><i class="fas fa-compass"></i> Arah Qibla</h1>
+                <p>Temukan arah Kiblat dari lokasi Anda</p>
+            </div>
+
+            <div class="info-cards">
+                <div class="info-card">
+                    <i class="fas fa-compass"></i>
+                    <h3>Arah Qibla</h3>
+                    <p id="qiblaDirection">Loading...</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-route"></i>
+                    <h3>Jarak ke Makkah</h3>
+                    <p id="distanceToMecca">Loading...</p>
+                </div>
+            </div>
+
+            <div class="countdown-section">
+                <div class="qibla-compass">
+                    <div class="compass-container">
+                        <div class="compass-directions">
+                            <div class="direction north">U</div>
+                            <div class="direction east">T</div>
+                            <div class="direction south">S</div>
+                            <div class="direction west">B</div>
+                        </div>
+                        
+                        <div id="qiblaArrow" class="qibla-arrow">
+                            <div class="arrow-head"></div>
+                        </div>
+                        
+                        <div class="compass-center"></div>
+                    </div>
+                </div>
+                <p class="qibla-info">
+                    <i class="fas fa-info-circle"></i> 
+                    Posisikan perangkat Anda menghadap utara, lalu ikuti arah panah untuk menghadap Qibla
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="src/modules/utils.js"></script>
+    <script src="src/modules/storage.js"></script>
+    <script src="src/modules/api.js"></script>
+    <script src="src/modules/ui.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
