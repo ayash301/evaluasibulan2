@@ -5,10 +5,13 @@ window.UI = {
         coords: null
     },
 
+    countdownInterval: null,
+
     init: function() {
+        console.log('🕌 Initializing Prayer Times UI...');
         this.setupEventListeners();
-        this.loadInitialData();
         this.setupNavigation();
+        this.loadInitialData();
     },
 
     setupEventListeners: function() {
@@ -38,6 +41,34 @@ window.UI = {
         const now = new Date();
         document.getElementById('monthSelect').value = now.getMonth() + 1;
         document.getElementById('yearInput').value = now.getFullYear();
+
+        // Keyboard shortcuts
+        this.setupKeyboardShortcuts();
+    },
+
+    setupKeyboardShortcuts: function() {
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case '1':
+                        e.preventDefault();
+                        this.showPage('home');
+                        break;
+                    case '2':
+                        e.preventDefault();
+                        this.showPage('detail');
+                        break;
+                    case '3':
+                        e.preventDefault();
+                        this.showPage('qibla');
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        this.loadPrayerTimes();
+                        break;
+                }
+            }
+        });
     },
 
     setupNavigation: function() {
@@ -90,7 +121,7 @@ window.UI = {
         this.loadPrayerTimes();
         
         // Update dates
-        this.updateDates();
+        this.updateCurrentDates();
     },
 
     handleSearch: function() {
@@ -98,7 +129,7 @@ window.UI = {
         const country = document.getElementById('countrySelect').value;
         
         if (!city) {
-            this.showError('Mohon masukkan nama kota');
+            this.showNotification('Mohon masukkan nama kota', 'error');
             return;
         }
 
@@ -106,21 +137,28 @@ window.UI = {
         this.currentLocation.country = country;
         this.currentLocation.coords = null;
 
-        // Save as favorite
+        // Save to storage
         Storage.saveFavoriteLocation(city, country);
 
+        // Clear cache for fresh data
+        const cacheKey = `${city}_${country}`;
+        Storage.remove(`prayer_${cacheKey}`);
+        
         // Update UI and load prayer times
         this.updateLocationDisplay();
         this.loadPrayerTimes();
+        
+        // Show notification
+        this.showNotification(`Mengambil data untuk ${city}, ${country}`);
     },
 
     handleLocationRequest: function() {
         if (!navigator.geolocation) {
-            this.showError('Geolocation tidak didukung oleh browser Anda');
+            this.showNotification('GPS tidak didukung oleh browser Anda', 'error');
             return;
         }
 
-        this.showLoading('Mendeteksi lokasi...');
+        this.showLoading('Mendeteksi lokasi Anda...', 'prayerTimesContainer');
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -131,6 +169,7 @@ window.UI = {
                 this.loadPrayerTimesByCoords();
             },
             (error) => {
+                console.error('Location error:', error);
                 let errorMessage = 'Gagal mendapatkan lokasi';
                 switch (error.code) {
                     case error.PERMISSION_DENIED:
@@ -143,7 +182,13 @@ window.UI = {
                         errorMessage = 'Permintaan lokasi timeout.';
                         break;
                 }
-                this.showError(errorMessage);
+                this.showNotification(errorMessage, 'error');
+                this.loadPrayerTimes(); // Fallback to city-based
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 300000
             }
         );
     },
@@ -153,28 +198,24 @@ window.UI = {
         this.showLoading('Memuat jadwal sholat...', container);
 
         try {
-            let response;
-            if (this.currentLocation.coords) {
-                response = await API.getPrayerTimesByCoords(
-                    this.currentLocation.coords.latitude,
-                    this.currentLocation.coords.longitude
-                );
-            } else {
-                response = await API.getPrayerTimes(
-                    this.currentLocation.city,
-                    this.currentLocation.country
-                );
-            }
+            console.log('📍 Loading prayer times for:', this.currentLocation.city, this.currentLocation.country);
+            
+            const response = await API.getPrayerTimes(this.currentLocation.city, this.currentLocation.country);
+            console.log('📡 API Response:', response);
 
-            if (response && response.status === 'success') {
+            if (response && response.code === 200) {
                 this.displayPrayerTimes(response.data);
+                this.displayLocationInfo(response.data, this.currentLocation.city, this.currentLocation.country);
                 this.startCountdown(response.data.timings);
+                this.showNotification('Jadwal sholat berhasil dimuat!');
             } else {
-                throw new Error('Data tidak valid');
+                throw new Error('Format data tidak valid');
             }
         } catch (error) {
-            console.error('Error loading prayer times:', error);
-            this.showError('Gagal memuat jadwal sholat. Silakan coba lagi.', container);
+            console.error('❌ Error loading prayer times:', error);
+            // Use fallback data
+            this.loadFallbackData();
+            this.showNotification('Menggunakan data offline', 'info');
         }
     },
 
@@ -188,22 +229,34 @@ window.UI = {
                 this.currentLocation.coords.longitude
             );
 
-            if (response && response.status === 'success') {
+            if (response && response.code === 200) {
                 this.displayPrayerTimes(response.data);
+                this.displayLocationInfo(response.data, 'Lokasi GPS', 'Koordinat');
                 this.startCountdown(response.data.timings);
                 this.updateLocationDisplay();
+                this.showNotification('Lokasi GPS berhasil dideteksi!');
             } else {
                 throw new Error('Data tidak valid');
             }
         } catch (error) {
             console.error('Error loading prayer times by coords:', error);
-            this.showError('Gagal memuat jadwal sholat. Silakan coba lagi.', container);
+            this.loadFallbackData();
+            this.showNotification('Menggunakan data offline', 'info');
         }
+    },
+
+    // Fallback data when API fails
+    loadFallbackData: function() {
+        const mockData = API.createMockResponse(this.currentLocation.city, this.currentLocation.country);
+        this.displayPrayerTimes(mockData.data);
+        this.displayLocationInfo(mockData.data, this.currentLocation.city, this.currentLocation.country);
+        this.startCountdown(mockData.data.timings);
     },
 
     displayPrayerTimes: function(data) {
         const container = document.getElementById('prayerTimesContainer');
         const timings = data.timings;
+        
         const prayerNames = {
             Fajr: { name: 'Subuh', icon: 'fas fa-sun' },
             Sunrise: { name: 'Terbit', icon: 'fas fa-sunrise' },
@@ -213,13 +266,15 @@ window.UI = {
             Isha: { name: 'Isya', icon: 'fas fa-moon' }
         };
 
+        const nextPrayerKey = this.getNextPrayer(timings);
+
         let html = '<div class="prayer-times">';
         
         Object.keys(prayerNames).forEach(prayerKey => {
             if (timings[prayerKey]) {
                 const prayer = prayerNames[prayerKey];
                 const time = Utils.formatTime(timings[prayerKey]);
-                const isNext = this.isNextPrayer(prayerKey, timings);
+                const isNext = prayerKey === nextPrayerKey;
                 
                 html += `
                     <div class="prayer-card ${isNext ? 'next-prayer' : ''}">
@@ -228,7 +283,9 @@ window.UI = {
                             ${prayer.name}
                         </div>
                         <div class="prayer-time">${time}</div>
-                        ${isNext ? '<div class="prayer-status">Sholat Selanjutnya</div>' : ''}
+                        <div class="prayer-status">
+                            ${isNext ? '🔔 Sholat Selanjutnya' : '✅ Jadwal Sholat'}
+                        </div>
                     </div>
                 `;
             }
@@ -236,9 +293,11 @@ window.UI = {
 
         html += '</div>';
         container.innerHTML = html;
+        
+        console.log('🎨 Prayer times displayed successfully');
     },
 
-    isNextPrayer: function(prayerKey, timings) {
+    getNextPrayer: function(timings) {
         const now = new Date();
         const currentTime = now.getHours() * 60 + now.getMinutes();
         
@@ -256,26 +315,31 @@ window.UI = {
                 const prayerTime = hours * 60 + minutes;
                 
                 if (prayerTime > currentTime) {
-                    return prayer.key === prayerKey;
+                    return prayer.key;
                 }
             }
         }
 
         // If no prayer found for today, first prayer tomorrow is Fajr
-        return prayerKey === 'Fajr';
+        return 'Fajr';
     },
 
     startCountdown: function(timings) {
+        // Clear existing interval
+        if (this.countdownInterval) {
+            clearInterval(this.countdownInterval);
+        }
+
         const updateCountdown = () => {
             const now = new Date();
             const currentTime = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
             
             const prayerTimes = [
-                { name: 'Subuh', time: timings.Fajr },
-                { name: 'Dzuhur', time: timings.Dhuhr },
-                { name: 'Ashar', time: timings.Asr },
-                { name: 'Maghrib', time: timings.Maghrib },
-                { name: 'Isya', time: timings.Isha }
+                { key: 'Fajr', name: 'Subuh', time: timings.Fajr },
+                { key: 'Dhuhr', name: 'Dzuhur', time: timings.Dhuhr },
+                { key: 'Asr', name: 'Ashar', time: timings.Asr },
+                { key: 'Maghrib', name: 'Maghrib', time: timings.Maghrib },
+                { key: 'Isha', name: 'Isya', time: timings.Isha }
             ];
 
             let nextPrayer = null;
@@ -301,7 +365,7 @@ window.UI = {
                 timeDiff = (24 * 3600 - currentTime) + prayerTime;
             }
 
-            if (nextPrayer) {
+            if (nextPrayer && timeDiff > 0) {
                 const hours = Math.floor(timeDiff / 3600);
                 const minutes = Math.floor((timeDiff % 3600) / 60);
                 const seconds = timeDiff % 60;
@@ -314,16 +378,16 @@ window.UI = {
         };
 
         updateCountdown();
-        setInterval(updateCountdown, 1000);
+        this.countdownInterval = setInterval(updateCountdown, 1000);
     },
 
     loadMonthlyData: async function() {
         const container = document.getElementById('monthlySchedule');
         const month = document.getElementById('monthSelect').value;
-        const year = document.getElementById('yearInput').value;
+        const year = document.getElementById('yearInput').value || new Date().getFullYear();
 
-        if (!month || !year) {
-            this.showError('Mohon pilih bulan dan tahun', container);
+        if (!month) {
+            this.showError('Mohon pilih bulan', container);
             return;
         }
 
@@ -337,8 +401,9 @@ window.UI = {
                 year
             );
 
-            if (response && response.status === 'success') {
+            if (response && response.code === 200) {
                 this.displayMonthlySchedule(response.data, month, year);
+                this.showNotification(`Jadwal ${Utils.getMonthName(month)} berhasil dimuat!`);
             } else {
                 throw new Error('Data tidak valid');
             }
@@ -348,35 +413,39 @@ window.UI = {
         }
     },
 
-    displayMonthlySchedule: function(data, month, year) {
+    displayMonthlySchedule: function(monthlyData, month, year) {
         const container = document.getElementById('monthlySchedule');
         const today = new Date().toISOString().split('T')[0];
         const monthName = Utils.getMonthName(month);
 
         let html = `
             <div class="monthly-table">
-                <h2>Jadwal Sholat ${monthName} ${year}</h2>
-                <table class="schedule-table">
-                    <thead>
-                        <tr>
-                            <th>Tanggal</th>
-                            <th>Subuh</th>
-                            <th>Dzuhur</th>
-                            <th>Ashar</th>
-                            <th>Maghrib</th>
-                            <th>Isya</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                <h2><i class="fas fa-calendar-alt"></i> Jadwal Sholat ${monthName} ${year}</h2>
+                <div style="overflow-x: auto;">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Subuh</th>
+                                <th>Dzuhur</th>
+                                <th>Ashar</th>
+                                <th>Maghrib</th>
+                                <th>Isya</th>
+                            </tr>
+                        </thead>
+                        <tbody>
         `;
 
-        data.forEach(day => {
-            const isToday = day.date.gregorian.date === today;
-            const timings = day.timings;
+        monthlyData.forEach(dayData => {
+            const isToday = dayData.date.gregorian.date === today;
+            const timings = dayData.timings;
             
             html += `
                 <tr class="${isToday ? 'today-row' : ''}">
-                    <td>${day.date.gregorian.day}</td>
+                    <td>
+                        ${dayData.date.gregorian.day}
+                        ${isToday ? '<br><small style="color: var(--gold-color);">Hari Ini</small>' : ''}
+                    </td>
                     <td>${Utils.formatTime(timings.Fajr)}</td>
                     <td>${Utils.formatTime(timings.Dhuhr)}</td>
                     <td>${Utils.formatTime(timings.Asr)}</td>
@@ -387,8 +456,9 @@ window.UI = {
         });
 
         html += `
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
 
@@ -396,35 +466,43 @@ window.UI = {
     },
 
     updateQiblaCompass: function() {
-        if (!this.currentLocation.coords) {
-            document.getElementById('qiblaDirection').textContent = 'Aktifkan lokasi untuk melihat arah Qibla';
-            document.getElementById('distanceToMecca').textContent = 'Tidak tersedia';
+        if (!navigator.geolocation) {
+            document.getElementById('qiblaDirection').textContent = 'GPS tidak tersedia';
+            document.getElementById('distanceToMecca').textContent = 'GPS tidak tersedia';
             return;
         }
 
-        const direction = Utils.calculateQiblaDirection(
-            this.currentLocation.coords.latitude,
-            this.currentLocation.coords.longitude
+        this.showLoading('Menghitung arah Qibla...', 'qiblaPage');
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                const direction = Utils.calculateQiblaDirection(latitude, longitude);
+                const distance = Utils.calculateDistance(latitude, longitude, 21.4225, 39.8262);
+
+                // Update direction text
+                const directionText = this.getDirectionText(direction);
+                document.getElementById('qiblaDirection').textContent = directionText;
+                document.getElementById('distanceToMecca').textContent = `${distance.toFixed(0)} km`;
+
+                // Update compass arrow
+                const arrow = document.getElementById('qiblaArrow');
+                if (arrow) {
+                    arrow.style.transform = `translate(-50%, -100%) rotate(${direction}deg)`;
+                }
+
+                // Start device orientation if supported
+                this.startCompass(direction);
+                
+                this.showNotification('Arah Qibla berhasil dihitung!');
+            },
+            (error) => {
+                console.error('Qibla calculation error:', error);
+                document.getElementById('qiblaDirection').textContent = 'Error GPS';
+                document.getElementById('distanceToMecca').textContent = 'Error GPS';
+                this.showNotification('Gagal menghitung arah Qibla. Aktifkan GPS.', 'error');
+            }
         );
-
-        const distance = Utils.calculateDistance(
-            this.currentLocation.coords.latitude,
-            this.currentLocation.coords.longitude,
-            21.4225, // Mecca latitude
-            39.8262  // Mecca longitude
-        );
-
-        // Update direction text
-        const directionText = this.getDirectionText(direction);
-        document.getElementById('qiblaDirection').textContent = directionText;
-        document.getElementById('distanceToMecca').textContent = `${distance.toFixed(0)} km`;
-
-        // Update compass arrow
-        const arrow = document.getElementById('qiblaArrow');
-        arrow.style.transform = `translate(-50%, -100%) rotate(${direction}deg)`;
-
-        // Start device orientation if supported
-        this.startCompass(direction);
     },
 
     getDirectionText: function(degrees) {
@@ -443,10 +521,47 @@ window.UI = {
             if (event.alpha !== null) {
                 const compassDirection = 360 - event.alpha; // Convert to degrees
                 const arrow = document.getElementById('qiblaArrow');
-                const adjustedDirection = (qiblaDirection - compassDirection + 360) % 360;
-                arrow.style.transform = `translate(-50%, -100%) rotate(${adjustedDirection}deg)`;
+                if (arrow) {
+                    const adjustedDirection = (qiblaDirection - compassDirection + 360) % 360;
+                    arrow.style.transform = `translate(-50%, -100%) rotate(${adjustedDirection}deg)`;
+                }
             }
         }, true);
+    },
+
+    displayLocationInfo: function(prayerData, city, country) {
+        document.getElementById('currentLocation').textContent = `${city}, ${country}`;
+        this.updateDateInfo(prayerData.date);
+    },
+
+    updateDateInfo: function(dateData) {
+        // Update Gregorian date
+        document.getElementById('gregorianDate').textContent = dateData.readable;
+        
+        // Update Hijri date
+        if (dateData.hijri) {
+            const hijri = dateData.hijri;
+            const hijriMonthNames = {
+                'Muharram': 'Muharram',
+                'Safar': 'Safar', 
+                'Rabi al-Awwal': 'Rabiul Awal',
+                'Rabi al-Thani': 'Rabiul Akhir',
+                'Jumada al-Awwal': 'Jumadil Awal',
+                'Jumada al-Thani': 'Jumadil Akhir',
+                'Rajab': 'Rajab',
+                'Sha\'ban': 'Sya\'ban',
+                'Ramadan': 'Ramadan',
+                'Shawwal': 'Syawal',
+                'Dhu al-Qi\'dah': 'Dzulqa\'dah',
+                'Dhu al-Hijjah': 'Dzulhijjah'
+            };
+            
+            const hijriMonth = hijriMonthNames[hijri.month.en] || hijri.month.en;
+            document.getElementById('hijriDate').textContent = 
+                `${hijri.day} ${hijriMonth} ${hijri.year} H`;
+        } else {
+            document.getElementById('hijriDate').textContent = 'Memuat...';
+        }
     },
 
     updateLocationDisplay: function() {
@@ -461,34 +576,130 @@ window.UI = {
         document.getElementById('currentLocation').textContent = locationText;
     },
 
-    updateDates: function() {
+    updateCurrentDates: function() {
         const now = new Date();
         document.getElementById('gregorianDate').textContent = Utils.formatDate(now);
-        
-        // Simplified Hijri date for demo
-        const hijriDate = API.getHijriDate(now);
-        document.getElementById('hijriDate').textContent = 
-            `${hijriDate.day} ${hijriDate.month.en} ${hijriDate.year} H`;
+        document.getElementById('hijriDate').textContent = 'Memuat...';
     },
 
-    showLoading: function(message = 'Memuat...', container = null) {
-        const target = container || document.getElementById('prayerTimesContainer');
-        target.innerHTML = `
-            <div class="loading">
-                <i class="fas fa-spinner"></i>
-                <p>${message}</p>
-            </div>
-        `;
+    showLoading: function(message = 'Memuat...', containerId = 'prayerTimesContainer') {
+        const container = document.getElementById(containerId);
+        if (container) {
+            container.innerHTML = `
+                <div class="loading">
+                    <i class="fas fa-spinner"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
     },
 
     showError: function(message, container = null) {
         const target = container || document.getElementById('prayerTimesContainer');
-        target.innerHTML = `
-            <div class="error">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>${message}</p>
-                <button onclick="UI.loadPrayerTimes()">Coba Lagi</button>
-            </div>
+        if (target) {
+            target.innerHTML = `
+                <div class="error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>${message}</p>
+                    <button onclick="UI.loadPrayerTimes()">Coba Lagi</button>
+                </div>
+            `;
+        }
+    },
+
+    showNotification: function(message, type = 'success') {
+        // Remove existing notification
+        const existingNotification = document.querySelector('.notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'success' ? 'var(--gold-color)' : '#ff4444'};
+            color: var(--text-dark);
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            z-index: 9999;
+            font-weight: bold;
+            max-width: 300px;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         `;
+
+        notification.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+            ${message}
+        `;
+
+        document.body.appendChild(notification);
+
+        // Animate in
+        setTimeout(() => {
+            notification.style.transform = 'translateX(0)';
+        }, 100);
+
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            notification.style.transform = 'translateX(400px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    },
+
+    // Export functionality
+    exportPrayerTimes: function() {
+        const container = document.getElementById('prayerTimesContainer');
+        const prayerCards = container.querySelectorAll('.prayer-card');
+        
+        if (!prayerCards.length) {
+            this.showNotification('Tidak ada data untuk diekspor', 'error');
+            return;
+        }
+
+        let csvData = [['Waktu Sholat', 'Jam', 'Status']];
+        
+        prayerCards.forEach(card => {
+            const name = card.querySelector('.prayer-name').textContent.trim();
+            const time = card.querySelector('.prayer-time').textContent.trim();
+            const status = card.querySelector('.prayer-status').textContent.trim();
+            
+            csvData.push([name, time, status]);
+        });
+
+        const csvContent = csvData.map(row => 
+            row.map(field => `"${field}"`).join(',')
+        ).join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `jadwal-sholat-${this.currentLocation.city}-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        
+        window.URL.revokeObjectURL(url);
+        this.showNotification('Data berhasil diekspor!');
     }
 };
+
+// Initialize UI when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        UI.init();
+    });
+} else {
+    UI.init();
+}
