@@ -14,3 +14,6 @@ Aplikasi web untuk menampilkan jadwal sholat, arah kiblat, dan informasi Islami 
 
 //link canva
 https://www.canva.com/design/DAG0XOOVLQM/hiP2NauwsIAGI6uhoume3w/edit?utm_content=DAG0XOOVLQM&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+
+//link vercel
+https://evaluasibulan2.vercel.app/
